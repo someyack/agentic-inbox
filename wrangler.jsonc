@@ -4,7 +4,7 @@
   "compatibility_date": "2025-11-28",
   "main": "./workers/app.ts",
   "preview_urls": false,
-  "workers_dev": true,
+  "workers_dev": false,
   "observability": {
     "enabled": true,
   },

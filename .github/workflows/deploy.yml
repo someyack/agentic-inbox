@@ -34,6 +34,7 @@ jobs:
           TEAM_DOMAIN: ${{ secrets.TEAM_DOMAIN }}
           DOMAINS: ${{ secrets.DOMAINS }}
           EMAIL_ADDRESSES: ${{ secrets.EMAIL_ADDRESSES }}
+          WORKER_DOMAIN: ${{ secrets.WORKER_DOMAIN }}
         shell: bash
         run: |
           node <<'NODE'
@@ -44,6 +45,7 @@ jobs:
             "TEAM_DOMAIN",
             "DOMAINS",
             "EMAIL_ADDRESSES",
+            "WORKER_DOMAIN",
           ];
 
           for (const name of required) {
@@ -69,12 +71,34 @@ jobs:
             );
           }
 
+          const workerDomain = process.env.WORKER_DOMAIN.trim().toLowerCase();
+          const labels = workerDomain.split(".");
+          const { isIPv4 } = require("node:net");
+          if (
+            workerDomain.length > 253 ||
+            labels.length < 2 ||
+            labels.some(
+              (label) =>
+                label.length < 1 ||
+                label.length > 63 ||
+                !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+            ) ||
+            isIPv4(workerDomain)
+          ) {
+            throw new Error(
+              "WORKER_DOMAIN must be a valid DNS hostname with at least two labels",
+            );
+          }
+
           const masks = new Set([
             process.env.DOMAINS,
             process.env.DOMAINS.trim(),
             process.env.EMAIL_ADDRESSES,
             JSON.stringify(addresses),
             JSON.stringify(addresses, null, 2),
+            process.env.WORKER_DOMAIN,
+            process.env.WORKER_DOMAIN.trim(),
+            workerDomain,
             ...addresses,
             ...addresses.map((address) => JSON.stringify(address)),
           ]);
@@ -96,6 +120,7 @@ jobs:
           CI_WORKER_CONFIG: "true"
           DOMAINS: ${{ secrets.DOMAINS }}
           EMAIL_ADDRESSES: ${{ secrets.EMAIL_ADDRESSES }}
+          WORKER_DOMAIN: ${{ secrets.WORKER_DOMAIN }}
         run: npm run build
 
       - name: Deploy Worker

@@ -86,19 +86,32 @@ gh secret set POLICY_AUD
 gh secret set TEAM_DOMAIN
 gh secret set DOMAINS
 gh secret set EMAIL_ADDRESSES
+gh secret set WORKER_DOMAIN
 ```
 
 For `DOMAINS`, enter a domain such as `example.com`. For `EMAIL_ADDRESSES`, enter
 a JSON string array such as `["alice@example.com","support@example.com"]`. An
-explicit `[]` keeps the existing unrestricted-address behavior.
+explicit `[]` keeps the existing unrestricted-address behavior. For
+`WORKER_DOMAIN`, enter a hostname only, such as `inbox.example.com`.
 
-`DOMAINS` and `EMAIL_ADDRESSES` are GitHub secrets only as a CI input
-protection measure. The build writes them as plaintext Worker vars, and allowed
-addresses are returned to authenticated application users. `POLICY_AUD` and
+`DOMAINS`, `EMAIL_ADDRESSES`, and `WORKER_DOMAIN` are GitHub secrets only as a CI
+input protection measure. The build writes the first two as plaintext Worker
+vars, and allowed addresses are returned to authenticated application users.
+`WORKER_DOMAIN` is routing metadata: CI creates a native custom-domain route
+during deployment while preserving the `workers.dev` fallback. `POLICY_AUD` and
 `TEAM_DOMAIN` are uploaded separately as actual Worker secrets. Keeping Access
 values only in the workflow environment is not sufficient; the Wrangler Action
 `secrets` input performs that upload. Never commit any of these values or a
 generated deployment config.
+
+The custom hostname's zone must be active in the same Cloudflare account. The
+API token needs route/domain management permission for the target zone and the
+required zone read permissions. Ensure the hostname has no conflicting existing
+CNAME; Cloudflare manages its DNS and certificates. Protect the custom hostname
+with Cloudflare Access before using it. When adding it to the existing Access
+application, use that application's AUD; otherwise create a matching application
+and use its `POLICY_AUD`. `TEAM_DOMAIN` remains the Access team URL in the form
+`https://team.cloudflareaccess.com`, not the new application domain.
 
 ## Prerequisites
 

@@ -3,12 +3,35 @@
 //     https://opensource.org/licenses/Apache-2.0
 
 import { reactRouter } from "@react-router/dev/vite";
-import { cloudflare } from "@cloudflare/vite-plugin";
+import { cloudflare, type WorkerConfig } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
+import { isIPv4 } from "node:net";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 
-function applyCiWorkerConfig(current: { vars?: Record<string, unknown> }) {
+function normalizeWorkerDomain(value: string | undefined): string {
+  const hostname = value?.trim().toLowerCase();
+  const labels = hostname?.split(".") ?? [];
+  if (
+    hostname === undefined ||
+    hostname.length === 0 ||
+    hostname.length > 253 ||
+    labels.length < 2 ||
+    labels.some(
+      (label) =>
+        label.length < 1 ||
+        label.length > 63 ||
+        !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
+    ) ||
+    isIPv4(hostname)
+  ) {
+    throw new Error("WORKER_DOMAIN must be a valid DNS hostname with at least two labels");
+  }
+
+  return hostname;
+}
+
+function applyCiWorkerConfig(current: WorkerConfig) {
   if (process.env.CI_WORKER_CONFIG !== "true") {
     return;
   }
@@ -39,12 +62,15 @@ function applyCiWorkerConfig(current: { vars?: Record<string, unknown> }) {
     throw new Error("EMAIL_ADDRESSES must be a JSON string array with no blank elements");
   }
 
+  const workerDomain = normalizeWorkerDomain(process.env.WORKER_DOMAIN);
+
   if (current.vars === undefined) {
     throw new Error("DOMAINS and EMAIL_ADDRESSES require a vars configuration");
   }
 
   current.vars.DOMAINS = domains.trim();
   current.vars.EMAIL_ADDRESSES = emailAddresses;
+  current.routes = [{ pattern: workerDomain, custom_domain: true }];
 }
 
 export default defineConfig({
