@@ -68,6 +68,38 @@ npm run dev
 npm run deploy
 ```
 
+### Deploy from GitHub Actions
+
+The deploy workflow runs on pushes to the default `main` branch and can also be
+started manually from the Actions tab. Before enabling it, complete the
+prerequisites below and create the existing resources referenced by
+`wrangler.jsonc`, including the `agentic-inbox` R2 bucket, Email Routing, Email
+Service, Workers AI, and one-click Cloudflare Access.
+
+Add the required GitHub Actions secrets interactively so their values are not
+stored in shell history or committed files:
+
+```bash
+gh secret set CLOUDFLARE_API_TOKEN
+gh secret set CLOUDFLARE_ACCOUNT_ID
+gh secret set POLICY_AUD
+gh secret set TEAM_DOMAIN
+gh secret set DOMAINS
+gh secret set EMAIL_ADDRESSES
+```
+
+For `DOMAINS`, enter a domain such as `example.com`. For `EMAIL_ADDRESSES`, enter
+a JSON string array such as `["alice@example.com","support@example.com"]`. An
+explicit `[]` keeps the existing unrestricted-address behavior.
+
+`DOMAINS` and `EMAIL_ADDRESSES` are GitHub secrets only as a CI input
+protection measure. The build writes them as plaintext Worker vars, and allowed
+addresses are returned to authenticated application users. `POLICY_AUD` and
+`TEAM_DOMAIN` are uploaded separately as actual Worker secrets. Keeping Access
+values only in the workflow environment is not sufficient; the Wrangler Action
+`secrets` input performs that upload. Never commit any of these values or a
+generated deployment config.
+
 ## Prerequisites
 
 - Cloudflare account with a domain

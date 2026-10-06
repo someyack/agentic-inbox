@@ -1,0 +1,113 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate deployment inputs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          POLICY_AUD: ${{ secrets.POLICY_AUD }}
+          TEAM_DOMAIN: ${{ secrets.TEAM_DOMAIN }}
+          DOMAINS: ${{ secrets.DOMAINS }}
+          EMAIL_ADDRESSES: ${{ secrets.EMAIL_ADDRESSES }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const required = [
+            "CLOUDFLARE_API_TOKEN",
+            "CLOUDFLARE_ACCOUNT_ID",
+            "POLICY_AUD",
+            "TEAM_DOMAIN",
+            "DOMAINS",
+            "EMAIL_ADDRESSES",
+          ];
+
+          for (const name of required) {
+            if (!process.env[name] || process.env[name].trim() === "") {
+              throw new Error(`${name} must be configured and nonblank`);
+            }
+          }
+
+          let addresses;
+          try {
+            addresses = JSON.parse(process.env.EMAIL_ADDRESSES);
+          } catch {
+            throw new Error("EMAIL_ADDRESSES must be valid JSON");
+          }
+          if (
+            !Array.isArray(addresses) ||
+            !addresses.every(
+              (address) => typeof address === "string" && address.trim() !== "",
+            )
+          ) {
+            throw new Error(
+              "EMAIL_ADDRESSES must be a JSON string array with no blank elements",
+            );
+          }
+
+          const masks = new Set([
+            process.env.DOMAINS,
+            process.env.DOMAINS.trim(),
+            process.env.EMAIL_ADDRESSES,
+            JSON.stringify(addresses),
+            JSON.stringify(addresses, null, 2),
+            ...addresses,
+            ...addresses.map((address) => JSON.stringify(address)),
+          ]);
+          const escapeWorkflowCommand = (value) =>
+            value.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+          for (const value of masks) {
+            if (value) console.log(`::add-mask::${escapeWorkflowCommand(value)}`);
+          }
+          NODE
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build deployment
+        env:
+          CI_WORKER_CONFIG: "true"
+          DOMAINS: ${{ secrets.DOMAINS }}
+          EMAIL_ADDRESSES: ${{ secrets.EMAIL_ADDRESSES }}
+        run: npm run build
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4.74.0"
+          command: deploy
+          secrets: |
+            POLICY_AUD
+            TEAM_DOMAIN
+        env:
+          POLICY_AUD: ${{ secrets.POLICY_AUD }}
+          TEAM_DOMAIN: ${{ secrets.TEAM_DOMAIN }}
