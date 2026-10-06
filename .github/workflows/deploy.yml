@@ -23,7 +23,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Validate deployment inputs
@@ -123,16 +123,81 @@ jobs:
           WORKER_DOMAIN: ${{ secrets.WORKER_DOMAIN }}
         run: npm run build
 
+      - name: Create Worker secrets file
+        id: worker-secrets
+        env:
+          POLICY_AUD: ${{ secrets.POLICY_AUD }}
+          TEAM_DOMAIN: ${{ secrets.TEAM_DOMAIN }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          let secretsDirectory;
+          try {
+            for (const name of ["POLICY_AUD", "TEAM_DOMAIN"]) {
+              if (!process.env[name] || process.env[name].trim() === "") {
+                throw new Error(`${name} must be configured and nonblank`);
+              }
+            }
+
+            const runnerTemp = process.env.RUNNER_TEMP;
+            secretsDirectory = fs.mkdtempSync(
+              path.join(runnerTemp, "worker-secrets-"),
+            );
+            fs.chmodSync(secretsDirectory, 0o700);
+            const secretsFile = path.join(secretsDirectory, "secrets.json");
+            fs.writeFileSync(
+              secretsFile,
+              JSON.stringify({
+                POLICY_AUD: process.env.POLICY_AUD,
+                TEAM_DOMAIN: process.env.TEAM_DOMAIN,
+              }),
+              { mode: 0o600, flag: "wx" },
+            );
+            fs.chmodSync(secretsFile, 0o600);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `path=${secretsFile}\n`);
+          } catch (error) {
+            if (secretsDirectory) {
+              fs.rmSync(secretsDirectory, { recursive: true, force: true });
+            }
+            throw error;
+          }
+          NODE
+
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.74.0"
-          command: deploy
-          secrets: |
-            POLICY_AUD
-            TEAM_DOMAIN
+          command: deploy --secrets-file "${{ steps.worker-secrets.outputs.path }}"
+
+      - name: Clean up Worker secrets file
+        if: always()
         env:
-          POLICY_AUD: ${{ secrets.POLICY_AUD }}
-          TEAM_DOMAIN: ${{ secrets.TEAM_DOMAIN }}
+          SECRETS_FILE: ${{ steps.worker-secrets.outputs.path }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+
+          const secretsFile = process.env.SECRETS_FILE;
+          if (secretsFile) {
+            fs.rmSync(secretsFile, { force: true });
+            const secretsDirectory = path.dirname(secretsFile);
+            const runnerTemp = path.resolve(process.env.RUNNER_TEMP);
+            if (
+              path.dirname(secretsDirectory) === runnerTemp &&
+              path.basename(secretsDirectory).startsWith("worker-secrets-")
+            ) {
+              try {
+                fs.rmdirSync(secretsDirectory);
+              } catch (error) {
+                if (error.code !== "ENOENT" && error.code !== "ENOTEMPTY") throw error;
+              }
+            }
+          }
+          NODE

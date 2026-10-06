@@ -99,10 +99,10 @@ input protection measure. The build writes the first two as plaintext Worker
 vars, and allowed addresses are returned to authenticated application users.
 `WORKER_DOMAIN` is routing metadata: CI creates a native custom-domain route
 during deployment while preserving the `workers.dev` fallback. `POLICY_AUD` and
-`TEAM_DOMAIN` are uploaded separately as actual Worker secrets. Keeping Access
-values only in the workflow environment is not sufficient; the Wrangler Action
-`secrets` input performs that upload. Never commit any of these values or a
-generated deployment config.
+`TEAM_DOMAIN` are encrypted Worker secrets supplied in the same deployment from
+a temporary restricted-permission file, which the workflow removes afterward.
+Never commit any of these values, the temporary secrets file, or a generated
+deployment config.
 
 The custom hostname's zone must be active in the same Cloudflare account. The
 API token needs route/domain management permission for the target zone and the
