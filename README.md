@@ -94,6 +94,8 @@ a JSON string array such as `["alice@example.com","support@example.com"]`. An
 explicit `[]` keeps the existing unrestricted-address behavior. For
 `WORKER_DOMAIN`, enter a hostname only, such as `inbox.example.com`.
 
+CI trims surrounding whitespace from `TEAM_DOMAIN` before passing it as a Worker secret during the same deploy.
+
 `DOMAINS`, `EMAIL_ADDRESSES`, and `WORKER_DOMAIN` are GitHub secrets only as a CI
 input protection measure. The build writes the first two as plaintext Worker
 vars, and allowed addresses are returned to authenticated application users.

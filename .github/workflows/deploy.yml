@@ -152,7 +152,7 @@ jobs:
               secretsFile,
               JSON.stringify({
                 POLICY_AUD: process.env.POLICY_AUD,
-                TEAM_DOMAIN: process.env.TEAM_DOMAIN,
+                TEAM_DOMAIN: process.env.TEAM_DOMAIN.trim(),
               }),
               { mode: 0o600, flag: "wx" },
             );
